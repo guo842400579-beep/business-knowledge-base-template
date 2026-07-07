@@ -32,6 +32,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument('--root', type=Path, default=None, help='Path to knowledge-base root or WIKI directory')
     parser.add_argument('--fix', action='store_true', help='Fix simple table pipe issues')
     parser.add_argument('--strict-init', action='store_true', help='Warn about template placeholders left in a real knowledge base')
+    parser.add_argument('--sensitive-term', action='append', default=[], help='Sensitive term to scan for; may be repeated')
+    parser.add_argument('--sensitive-file', type=Path, default=None, help='File containing sensitive terms, one per line')
     return parser.parse_args()
 
 
@@ -177,6 +179,14 @@ def check_tables(content: str, filepath: Path, wiki_root: Path) -> List[Issue]:
     return issues
 
 
+def check_line_number_pollution(content: str, filepath: Path, wiki_root: Path) -> List[Issue]:
+    issues: List[Issue] = []
+    for number, line in enumerate(content.splitlines(), 1):
+        if re.match(r'^\s*[0-9]{2,6}\|', line):
+            issues.append(Issue('P0', rel(filepath, wiki_root), number, '疑似误粘贴读取行号前缀'))
+    return issues
+
+
 def check_frontmatter(content: str, filepath: Path, wiki_root: Path) -> List[Issue]:
     issues: List[Issue] = []
     lines = content.splitlines()
@@ -287,6 +297,57 @@ def check_initialization_placeholders(kb_root: Path) -> List[Issue]:
     return issues
 
 
+def load_sensitive_terms(args: argparse.Namespace) -> List[str]:
+    terms = [term.strip() for term in args.sensitive_term if term.strip()]
+    if args.sensitive_file:
+        try:
+            for line in args.sensitive_file.read_text(encoding='utf-8').splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith('#'):
+                    terms.append(stripped)
+        except OSError as exc:
+            raise RuntimeError(f'Failed to read sensitive file: {args.sensitive_file}: {exc}') from exc
+    seen = set()
+    unique_terms = []
+    for term in terms:
+        if term in seen:
+            continue
+        seen.add(term)
+        unique_terms.append(term)
+    return unique_terms
+
+
+def iter_share_text_files(kb_root: Path):
+    suffixes = {'.md', '.txt', '.yaml', '.yml', '.json', '.csv', '.py'}
+    for filepath in sorted(kb_root.rglob('*')):
+        if not filepath.is_file():
+            continue
+        if '.git' in filepath.parts:
+            continue
+        if filepath.suffix.lower() not in suffixes:
+            continue
+        yield filepath
+
+
+def check_sensitive_terms(kb_root: Path, terms: List[str]) -> List[Issue]:
+    issues: List[Issue] = []
+    if not terms:
+        return issues
+    for filepath in iter_share_text_files(kb_root):
+        try:
+            content = filepath.read_text(encoding='utf-8')
+        except UnicodeDecodeError:
+            continue
+        except OSError as exc:
+            issues.append(Issue('P0', rel(filepath, kb_root), None, f'文件读取失败: {exc}'))
+            continue
+        for number, line in enumerate(content.splitlines(), 1):
+            for term in terms:
+                if term in line:
+                    issues.append(Issue('P1', rel(filepath, kb_root), number, f'命中用户提供的敏感词: {term}'))
+    return issues
+
+
 def fix_content(content: str) -> str:
     fixed = []
     for line in content.splitlines():
@@ -307,12 +368,18 @@ def main() -> int:
         return 2
 
     issues: List[Issue] = []
+    try:
+        sensitive_terms = load_sensitive_terms(args)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
     md_files = sorted(wiki_root.rglob('*.md'))
     issues.extend(check_index_structure(wiki_root))
     issues.extend(check_index_completeness(wiki_root))
     issues.extend(check_share_artifacts(kb_root))
     if args.strict_init:
         issues.extend(check_initialization_placeholders(kb_root))
+    issues.extend(check_sensitive_terms(kb_root, sensitive_terms))
 
     for filepath in md_files:
         try:
@@ -323,6 +390,7 @@ def main() -> int:
         issues.extend(check_frontmatter(content, filepath, wiki_root))
         issues.extend(check_tables(content, filepath, wiki_root))
         issues.extend(check_links(content, filepath, wiki_root))
+        issues.extend(check_line_number_pollution(content, filepath, wiki_root))
 
     if args.fix:
         fixed_count = 0
