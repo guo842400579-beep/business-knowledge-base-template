@@ -1,0 +1,4 @@
+interface:
+  display_name: "源码维护编排"
+  short_description: "为大型源码维护建立覆盖矩阵、批次、恢复点和基线终审"
+  default_prompt: "Use $orchestrate-source-maintenance to plan or resume a large source-backed knowledge-base maintenance run."

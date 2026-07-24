@@ -1,0 +1,4 @@
+interface:
+  display_name: "源码分析到知识库"
+  short_description: "追踪单个业务对象的源码证据，并把结论融合回 WIKI"
+  default_prompt: "Use $extract-source-to-wiki to trace one business object through source code and update the knowledge base."

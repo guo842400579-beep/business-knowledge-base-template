@@ -1,0 +1,4 @@
+interface:
+  display_name: "查询业务知识库"
+  short_description: "从稳定 WIKI 正文回答业务问题，并按需追溯证据与未决边界"
+  default_prompt: "Use $query to answer a business question from this knowledge base with sources and boundaries."

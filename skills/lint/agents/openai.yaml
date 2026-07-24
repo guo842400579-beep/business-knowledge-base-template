@@ -1,0 +1,4 @@
+interface:
+  display_name: "检查业务知识库"
+  short_description: "运行确定性发布门、非阻断内容审计、纯度、初始化与分享风险检查"
+  default_prompt: "Use $lint to validate this business knowledge base and separate blockers from advisory findings."

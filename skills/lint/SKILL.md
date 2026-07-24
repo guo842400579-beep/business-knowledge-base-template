@@ -1,170 +1,185 @@
 ---
 name: lint
-description: 业务知识库健康检查。Use when 用户要求检查知识库、lint、检查一致性、修复断链、检查 frontmatter、检查 index、检查表格、检查敏感信息，或完成维护后的验证。
-version: 1.1.0
-license: MIT
-metadata:
-  tags: [knowledge-base, lint, wiki, consistency-check]
-  related_skills: [query, record-feature-to-wiki, extract-source-to-wiki]
+description: 对业务知识库执行确定性发布门、非阻断内容审计、初始化占位检查、分享清洁度检查和用户指定敏感词扫描。Use when 用户要求检查知识库、lint、一致性、断链、frontmatter、source、index、表格、WIKI 纯度、初始化状态或分享风险，或完成维护后的验证。
 ---
 
-# 知识库 Lint 工作流
+# 知识库 Lint
 
-## 核心原则
+先检查确定性结构和可追溯性，再把需要业务判断的成熟度问题作为非阻断审计单独报告。不要把 Audit 提示等同于发布失败。
 
-Lint 先检查结构和可追溯性，再处理内容一致性。脚本负责发现通用结构问题，人工负责判断业务结论是否正确。
-
-不要把业务专有规则硬编码进模板 lint。模板只能保留通用规则：index、frontmatter、source、断链、表格、行号污染、初始化占位、分享清洁度和用户指定敏感词。
-
-## 何时使用
-
-- 完成新增、移动、重命名或删除文档后。
-- 完成页面实采、RAW 提取或源码映射回写后。
-- 用户要求“检查知识库”“lint”“检查一致性”“修复知识库问题”。
-- 发现断链、索引遗漏、frontmatter 缺失、表格渲染异常、来源缺失或疑似敏感信息时。
-- 对外分享模板或从模板创建真实知识库前。
-
-## 前置预热
+## 前置阅读
 
 检查前先读：
 
-| 文件 | 目的 |
-|------|------|
-| `AGENTS.md` | 确认目录规范、frontmatter 要求、RAW 只增不删和日志要求 |
-| `WIKI/index.md` | 确认全库结构和当前模块入口 |
-| `WIKI/概念/概念_index.md` | 建立概念背景，避免机械修复破坏业务含义 |
+1. `AGENTS.md`；
+2. `WIKI/index.md`；
+3. `WIKI/概念/概念_index.md`；
+4. 本次修改过的文件。
 
-如果本次 lint 是某次维护后的验证，还要读本次修改过的文件。
+默认只读。只有用户要求修复，或当前任务本身包含维护，才修改文件。
 
-## 推荐命令
+## 确定性发布门
 
 ```bash
-# 只读检查
 python3 skills/lint/scripts/lint_wiki.py
+```
 
-# 修复简单表格行首多竖线问题；修完后必须重跑只读检查
+检查：
+
+| 检查项 | 级别 | 说明 |
+|--------|------|------|
+| WIKI 根 index | P0 | 必须存在 `WIKI/index.md` |
+| 子目录 index | P0 | 含直接 Markdown 的目录必须有同名 `_index.md` |
+| Markdown 链接 | P0 | 检查空链接、断链和越出知识库根目录；支持尖括号空格路径 |
+| Frontmatter 结构 | P0/P1 | 起止符，`title/type/date/updated` 非空，以及合法 `type` |
+| Source 可追溯 | P0/P1 | 普通页必须引用 RAW 下存在的具体文件 |
+| Index 覆盖 | P2 | 覆盖同目录页面和直接子目录入口 |
+| 表格格式 | P2 | 列数、行首多余竖线；忽略代码围栏 |
+| 行号污染 | P0 | 检查误粘贴的读取行号前缀 |
+| 硬性过程噪声 | P1 | WIKI 不得含按钮清单、截图已归档等维护流水 |
+
+退出码：
+
+- `0`：确定性门禁通过；
+- `1`：发现 P0/P1/P2；
+- `2`：参数或知识库根目录无效。
+
+`WIKI/log.md` 属于审计层，不参与业务正文的 frontmatter/source/纯度检查。
+
+## 非阻断内容审计
+
+```bash
+python3 skills/lint/scripts/lint_wiki.py --audit
+```
+
+在默认门禁之外汇总：
+
+- 待补充、尚未实采等成熟度标记；
+- 本轮、未点击、当前样本等可能的过程语言；
+- 正文偏短；
+- Index `updated` 落后于子文档；
+- 同一目标在多个 Index 中出现完成/未完成状态冲突；
+- Index 中的临时进度图标或日期。
+
+这些提示可能是合法信息边界，必须人工判断。默认 lint 为 `0`、Audit 有提示时，正确表述是：
+
+> 结构门禁通过，仍有内容优化项。
+
+## 安全修复
+
+```bash
 python3 skills/lint/scripts/lint_wiki.py --fix
+```
 
-# 真实建库或分享前检查模板占位
-python3 skills/lint/scripts/lint_wiki.py --strict-init
+`--fix` 只在原列数不匹配、且移除候选行首竖线后恰好与分隔行一致时修复，然后自动重跑全部检查。合法空单元格、转义竖线和代码 span 中的竖线不会被改动。它不自动处理：
 
-# 指定知识库根目录或 WIKI 目录
+- 表格列数不一致；
+- source、链接或 Index 缺失；
+- frontmatter 内容；
+- 待完成、过程语言和业务冲突。
+
+含表格的 Markdown 应读取当前文件后整文件重写，不做脆弱的局部表格 patch。
+
+## 指定路径
+
+`--root` 同时接受知识库根目录和 `WIKI/` 目录：
+
+```bash
 python3 skills/lint/scripts/lint_wiki.py --root /path/to/knowledge-base
 python3 skills/lint/scripts/lint_wiki.py --root /path/to/knowledge-base/WIKI
 ```
 
-敏感词检查：
+有效知识库必须同时存在 `WIKI/` 和 `RAW_SOURCES/`。
+
+## 初始化检查
 
 ```bash
-# 单个或多个敏感词
-python3 skills/lint/scripts/lint_wiki.py --sensitive-term "公司名" --sensitive-term "系统域名"
-
-# 从文件读取敏感词，每行一个；空行和 # 注释会跳过
-python3 skills/lint/scripts/lint_wiki.py --sensitive-file sensitive_terms.txt
+python3 skills/lint/scripts/lint_wiki.py --strict-init
 ```
 
-敏感词文件不应提交到可分享模板；建议放在本地临时目录或私有路径。
+检查会成为真实业务内容的 `AGENTS.md`、`WIKI/`、截图证据路径、WIKI 实际引用的模板示例资产，以及 `BOOTSTRAP_ONCE.md` 是否仍有 `<待填写>`、示例系统、示例概念、示例页面、示例流程或虚构编号等模板残留。
 
-## 自动检查范围
+`README.md`、Skill 说明、分享清单和查询回归用例会长期保留虚构示例，因此不纳入该检查。
 
-| 检查项 | 严重级别 | 说明 |
-|--------|----------|------|
-| WIKI 根 `index.md` | P0 | 根目录必须存在 `WIKI/index.md` |
-| 子目录 `_index.md` | P0 | 含 `.md` 的子目录必须有 `{目录名}_index.md` |
-| index 链接有效性 | P0 | `_index.md` 和 `index.md` 中本地链接必须存在 |
-| Markdown 断链 | P0 | 正文本地链接必须指向存在文件或目录 |
-| frontmatter | P2 | 普通页检查 `title/type/source/date`；index 页可无 `source` |
-| source 可追溯 | P0 | `RAW_SOURCES/...` 路径必须存在 |
-| index 覆盖 | P2 | 同目录普通 `.md` 应被 `_index.md` 链接或提及 |
-| 表格格式 | P2 | 检查 `|||`、`|| |`、列数不一致 |
-| 行号污染 | P0 | 检查误粘贴的 `220|`、`   220|` 等读取行号 |
-| 分享清洁度 | P2 | 检查 `.DS_Store`、`.idea` 等本地杂文件 |
-| 初始化占位 | P3 | `--strict-init` 检查 `<待填写>`、示例系统和一次性清单 |
-| 敏感词 | P1 | 用户通过参数提供的敏感词命中 |
+原始模板运行时出现这些提示属于预期；从模板创建真实知识库并完成初始化后，必须处理到通过。
 
-`RAW_SOURCES/` 是原始证据，不参与结构 lint；但 frontmatter 中引用的 RAW 路径必须存在。
-
-## 检查顺序
-
-1. 运行只读 lint。
-2. 先修 P0：断链、缺失 index、source 不存在、文件不可读、行号污染。
-3. 再修 P1：敏感词、业务内容冲突或高风险错误。
-4. 再修 P2：frontmatter、表格、index 覆盖、分享杂文件。
-5. 最后处理 P3：命名建议、初始化占位、一次性文件。
-6. 每次修复后重跑 lint，直到通过或明确说明剩余问题为什么暂不处理。
-
-## 修复规则
-
-- 编辑前必须读取当前文件。
-- 含表格 Markdown 优先整文件重写或脚本生成，不要随手局部改 `|`。
-- 删除或大改文件前先复制到 `文档备份/`。
-- 重命名或移动文件后，搜索旧路径并同步更新：
-  - frontmatter `related`
-  - 正文 Markdown 链接
-  - 各级 `_index.md`
-  - `WIKI/index.md`
-  - `WIKI/log.md`
-- `--fix` 只适合修复简单行首多竖线；表格列数不一致必须人工读文件后修。
-- 不要为了通过 lint 删除 RAW、伪造 source、移除用户反馈或弱化业务事实。
-
-## 备用命令
-
-脚本不可用时，用以下命令辅助：
+## 分享清洁度
 
 ```bash
-# 文件结构
-find WIKI -type f -name "*.md" | sort
-
-# 表格行首异常
-rg -n "\|\|\||\|\| \|" WIKI
-
-# 本地链接和旧路径
-rg -n "旧文件名|旧路径" WIKI
-
-# 行号污染
-rg -n "^\s*[0-9]{2,6}\|" WIKI
-
-# 分享前检查本地杂文件
-find . -name ".DS_Store" -o -name ".idea"
+python3 skills/lint/scripts/lint_wiki.py --share-check
 ```
 
-敏感信息检查应由用户提供真实关键词，模板中不要硬编码真实公司名、域名、人员名、手机号、邮箱、合同号或订单号。
+检查 `.DS_Store`、`.idea`、`.vscode`、缓存、交换/备份文件和被带入分享包的 `.work` 等本地杂项。分享检查不放入日常结构门禁，避免用户本地编辑器状态阻断业务文档发布。
 
-## 业务一致性人工检查
+分享前还要人工复核图片、PDF、Office、压缩包、备份和 Git 历史。
 
-脚本不能判断业务结论是否正确。做较大维护后，人工检查：
+## 敏感词
 
-- 页面实采事实是否优先于源码推断。
-- 源码映射是否只放证据链，业务结论是否回写到功能模块、概念或流程。
-- 示例数据是否被标为示例，没有被写成枚举全集。
-- 用户反馈是否先保留原文，再经确认写成业务结论。
-- 页面未观察到或代码-only 能力是否没有被写成普通页面功能。
-- 新增页面、Tab、按钮或流程是否有 RAW 证据和 index/log 闭环。
+```bash
+python3 skills/lint/scripts/lint_wiki.py \
+  --sensitive-term "公司名" \
+  --sensitive-term "系统域名"
 
-## `WIKI/log.md` 要求
+python3 skills/lint/scripts/lint_wiki.py \
+  --sensitive-file /private/path/sensitive_terms.txt
+```
 
-如果 lint 触发了实际修复，应追加日志：
+敏感词文件每行一个，空行和 `#` 注释会跳过。扫描覆盖文件/目录名和常见文本类型，并尝试 UTF-8 与 GB18030；声明为文本但无法解码时阻断，避免假通过。私有敏感词文件不得提交到模板。
+
+## 页面纯化
+
+对本次页面实采或 RAW 回写的 WIKI 文件运行：
+
+```bash
+python3 skills/record-feature-to-wiki/scripts/check_wiki_purity.py WIKI/文件.md
+```
+
+- 硬性过程噪声返回失败；
+- 可能合法的信息边界只提示人工判断；
+- 不传文件或找不到 Markdown 时返回参数错误。
+
+## 修复顺序
+
+1. 运行默认 lint。
+2. 修 P0：根目录、断链、source、frontmatter 结构、行号污染。
+3. 修 P1：元数据、目录型 source、硬性过程噪声、敏感词。
+4. 修 P2：表格和 Index 覆盖。
+5. 重跑默认 lint。
+6. 运行 `--audit`，单独报告非阻断项。
+7. 对页面维护文件运行纯化检查。
+8. 运行 `git diff --check`。
+
+不要为了通过 lint：
+
+- 删除或改写 RAW；
+- 伪造 source；
+- 弱化业务事实；
+- 把冲突静默合并；
+- 把页面内按钮伪装成菜单；
+- 删除合法的信息边界。
+
+## 日志
+
+只读检查且未改文件，不写日志。
+
+实际修复后追加：
 
 ```markdown
 ## [YYYY-MM-DD] lint | 知识库健康检查
 - 修复：...
-- 验证：`python3 skills/lint/scripts/lint_wiki.py` 通过
-- 遗留：...
+- 验证：默认 lint 通过；Audit 遗留 ... 项。
 ```
 
-如果只是只读检查且未修改文件，可以不写日志；但最终回复需说明检查结果。
+每次最多两条 bullet。
 
-## Verification Checklist
+## 验证清单
 
-- [ ] `WIKI/index.md` 存在且链接有效。
-- [ ] 所有含 `.md` 的子目录都有 `_index.md`。
-- [ ] 同目录普通 `.md` 已被对应 `_index.md` 链接或提及。
-- [ ] 普通页 frontmatter 包含 `title/type/source/date`。
-- [ ] frontmatter `source` 指向真实 `RAW_SOURCES/...`。
-- [ ] 无 Markdown 断链。
-- [ ] 无 `|||`、`|| |` 或表格列数不一致。
-- [ ] 无行号前缀污染。
-- [ ] 重命名或移动后所有引用已同步。
-- [ ] `--strict-init` 已用于真实建库或分享前检查。
-- [ ] 如用户提供敏感词，已运行敏感词扫描。
-- [ ] 本次修复已更新相关 index 和 `WIKI/log.md`。
+- [ ] 默认 lint 退出码为 0。
+- [ ] 普通页 source 指向 RAW 下具体文件。
+- [ ] 本地链接和 Index 入口有效。
+- [ ] 无表格列数、行号污染和硬性过程噪声。
+- [ ] `--audit` 已单独查看，没有被误报为发布失败。
+- [ ] 页面维护文件通过纯化检查。
+- [ ] 真实建库后运行了 `--strict-init`。
+- [ ] 分享前运行了 `--share-check` 和用户指定敏感词扫描。
+- [ ] `git diff --check` 通过。

@@ -1,5 +1,15 @@
 .DS_Store
 .idea/
+.vscode/
+.work/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+*.swp
+*.swo
 *.tmp
 *.bak
+*~
 ~$*

@@ -1,4 +1,4 @@
 interface:
   display_name: "记录功能到知识库"
-  short_description: "把系统页面字段、按钮和截图沉淀为可追溯 WIKI 文档"
-  default_prompt: "Use $record-feature-to-wiki to record an inspected system page into the business knowledge base."
+  short_description: "安全探索系统页面，把最小证据与稳定知识闭环写入 WIKI"
+  default_prompt: "Use $record-feature-to-wiki to inspect one system page and publish a source-backed WIKI update."
